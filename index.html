@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title> Doctor Strange · Gesture FX</title>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cinzel:wght@400;600&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+  background:#000;
+  font-family:'Cinzel',serif;
+  overflow:hidden;
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+}
+
+#stage{
+  position:relative;
+  width:min(100vw, 177.78vh);
+  height:min(100vh, 56.25vw);
+  max-width:960px;
+  max-height:540px;
+}
+
+#video{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+  transform:scaleX(-1);
+  border-radius:6px;
+}
+
+#fx-canvas{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  border-radius:6px;
+  pointer-events:none;
+}
+
+/* HUD */
+#hud{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  pointer-events:none;
+  border-radius:6px;
+  overflow:hidden;
+}
+
+.corner{
+  position:absolute;
+  width:24px;height:24px;
+  border-color:#f0a500;
+  border-style:solid;
+  opacity:0.7;
+}
+.corner.tl{top:12px;left:12px;border-width:2px 0 0 2px}
+.corner.tr{top:12px;right:12px;border-width:2px 2px 0 0}
+.corner.bl{bottom:12px;left:12px;border-width:0 0 2px 2px}
+.corner.br{bottom:12px;right:12px;border-width:0 2px 2px 0}
+
+#gesture-label{
+  position:absolute;
+  bottom:20px;left:50%;
+  transform:translateX(-50%);
+  font-family:'Cinzel',serif;
+  font-size:clamp(10px,2vw,14px);
+  letter-spacing:0.35em;
+  color:#f0a500;
+  background:rgba(0,0,0,0.55);
+  padding:6px 20px;
+  border:1px solid rgba(240,165,0,0.4);
+  border-radius:2px;
+  white-space:nowrap;
+  backdrop-filter:blur(6px);
+  transition:opacity 0.3s;
+  text-shadow:0 0 12px rgba(240,165,0,0.7);
+}
+
+#title-bar{
+  position:absolute;
+  top:14px;left:50%;
+  transform:translateX(-50%);
+  font-family:'Cinzel Decorative',serif;
+  font-size:clamp(10px,2vw,15px);
+  letter-spacing:0.25em;
+  color:rgba(240,165,0,0.8);
+  white-space:nowrap;
+  text-shadow:0 0 20px rgba(240,165,0,0.5);
+}
+
+/* Gesture guide */
+#guide{
+  position:absolute;
+  right:14px;top:50%;
+  transform:translateY(-50%);
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.g-item{
+  background:rgba(0,0,0,0.6);
+  border:1px solid rgba(240,165,0,0.25);
+  border-radius:3px;
+  padding:5px 10px;
+  font-size:clamp(8px,1.5vw,11px);
+  color:rgba(240,165,0,0.7);
+  letter-spacing:0.1em;
+  white-space:nowrap;
+  backdrop-filter:blur(4px);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  transition:all 0.2s;
+}
+
+.g-item.active{
+  border-color:#f0a500;
+  color:#fff;
+  background:rgba(240,165,0,0.15);
+  box-shadow:0 0 10px rgba(240,165,0,0.3);
+}
+
+.g-dot{
+  width:6px;height:6px;
+  border-radius:50%;
+  background:#f0a500;
+  opacity:0.4;
+  flex-shrink:0;
+}
+
+.g-item.active .g-dot{opacity:1;box-shadow:0 0 6px #f0a500}
+
+/* Start screen */
+#start-screen{
+  position:absolute;inset:0;
+  background:rgba(0,0,0,0.92);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:18px;
+  border-radius:6px;
+  z-index:99;
+}
+
+.magic-circle{
+  width:80px;height:80px;
+  border:2px solid rgba(240,165,0,0.4);
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  animation:spin 6s linear infinite;
+  position:relative;
+}
+.magic-circle::before{
+  content:'';
+  position:absolute;
+  width:60px;height:60px;
+  border:1px solid rgba(240,165,0,0.25);
+  border-radius:50%;
+  animation:spin 4s linear infinite reverse;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+#start-screen h1{
+  font-family:'Cinzel Decorative',serif;
+  font-size:clamp(16px,3vw,26px);
+  color:#f0a500;
+  text-shadow:0 0 30px rgba(240,165,0,0.6);
+  letter-spacing:0.15em;
+  text-align:center;
+}
+
+#start-screen p{
+  font-size:13px;
+  color:#888;
+  text-align:center;
+  max-width:360px;
+  line-height:1.6;
+  letter-spacing:0.05em;
+}
+
+#start-btn{
+  background:transparent;
+  border:1px solid #f0a500;
+  color:#f0a500;
+  font-family:'Cinzel',serif;
+  font-size:12px;
+  letter-spacing:0.35em;
+  padding:12px 36px;
+  cursor:pointer;
+  border-radius:2px;
+  transition:all 0.3s;
+  text-transform:uppercase;
+}
+#start-btn:hover{
+  background:rgba(240,165,0,0.12);
+  box-shadow:0 0 25px rgba(240,165,0,0.4);
+}
+
+#loading{
+  position:absolute;inset:0;
+  background:rgba(0,0,0,0.85);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  gap:14px;
+  border-radius:6px;
+  z-index:98;
+  color:#f0a500;
+  font-size:13px;
+  letter-spacing:0.2em;
+}
+
+.load-bar{
+  width:200px;height:2px;
+  background:rgba(240,165,0,0.2);
+  border-radius:2px;
+  overflow:hidden;
+}
+.load-fill{
+  height:100%;
+  background:#f0a500;
+  animation:loadAnim 2s ease-in-out infinite;
+}
+@keyframes loadAnim{
+  0%{width:0%;margin-left:0}
+  50%{width:60%;margin-left:20%}
+  100%{width:0%;margin-left:100%}
+}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="fx-canvas"></canvas>
+
+  <div id="hud">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <div id="title-bar">✦ SORCERER SUPREME · GESTURE INTERFACE ✦</div>
+    <div id="gesture-label">AWAITING GESTURE…</div>
+
+    <div id="guide">
+     
+      <div class="g-item" id="g-fist"><div class="g-dot"></div>FIST → MANDALA</div>
+      <div class="g-item" id="g-point"><div class="g-dot"></div>POINT → SLING RING</div>
+      <div class="g-item" id="g-peace"><div class="g-dot"></div>PEACE ✌ → MIRROR DIM.</div>
+      <div class="g-item" id="g-ok"><div class="g-dot"></div>👌+👌 BOTH HANDS → TIME STONE</div>
+      <div class="g-item" id="g-spidey"><div class="g-dot"></div>SPIDEY 🤟 → ASTRAL</div>
+    </div>
+  </div>
+
+  <div id="loading">
+    <span>CHANNELING MYSTIC ARTS…</span>
+    <div class="load-bar"><div class="load-fill"></div></div>
+  </div>
+
+  <div id="start-screen">
+    <div class="magic-circle">
+      <span style="font-size:28px;animation:none">⟳</span>
+    </div>
+    <h1>MASTER THE MYSTIC ARTS</h1>
+    <p>Hand gestures control the spell. Point, open your palm, make a fist — each gesture summons a different power.</p>
+    <button id="start-btn" onclick="startApp()">OPEN THE EYE</button>
+  </div>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('fx-canvas');
+const ctx = canvas.getContext('2d');
+const gestureLabel = document.getElementById('gesture-label');
+
+let W, H;
+let currentGesture = 'none';
+let prevGesture = 'none';
+let gestureHoldFrames = 0;
+const GESTURE_HOLD_THRESHOLD = 8;
+
+let frameCount = 0;
+let particles = [];
+let sparks = [];
+let mandalaParts = [];
+
+// Hand landmark indices
+const LM = {
+  WRIST:0, THUMB_TIP:4, INDEX_MCP:5, INDEX_TIP:8,
+  MIDDLE_MCP:9, MIDDLE_TIP:12, RING_MCP:13, RING_TIP:16,
+  PINKY_MCP:17, PINKY_TIP:20,
+  INDEX_PIP:6, MIDDLE_PIP:10, RING_PIP:14, PINKY_PIP:18,
+  THUMB_IP:3, INDEX_DIP:7, MIDDLE_DIP:11, RING_DIP:15, PINKY_DIP:19
+};
+
+function dist(a, b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function isExtended(tip, pip, mcp){
+  return tip.y < pip.y && pip.y < mcp.y;
+}
+
+function classifyGesture(lm){
+  if(!lm || lm.length < 21) return 'none';
+
+  const thumb = lm[LM.THUMB_TIP], index = lm[LM.INDEX_TIP];
+  const middle = lm[LM.MIDDLE_TIP], ring = lm[LM.RING_TIP], pinky = lm[LM.PINKY_TIP];
+  const indexPip = lm[LM.INDEX_PIP], middlePip = lm[LM.MIDDLE_PIP];
+  const ringPip = lm[LM.RING_PIP], pinkyPip = lm[LM.PINKY_PIP];
+  const indexMcp = lm[LM.INDEX_MCP], middleMcp = lm[LM.MIDDLE_MCP];
+  const ringMcp = lm[LM.RING_MCP], pinkyMcp = lm[LM.PINKY_MCP];
+  const wrist = lm[LM.WRIST];
+
+  const idxExt = index.y < indexPip.y;
+  const midExt = middle.y < middlePip.y;
+  const rngExt = ring.y < ringPip.y;
+  const pnkExt = pinky.y < pinkyPip.y;
+  const thumbUp = thumb.x < lm[LM.THUMB_IP].x; // mirrored
+
+  // OPEN HAND — all fingers extended
+  if(idxExt && midExt && rngExt && pnkExt) return 'open';
+
+  // FIST — all fingers curled
+  if(!idxExt && !midExt && !rngExt && !pnkExt && dist(index,wrist) < dist(indexMcp,wrist)*1.1) return 'fist';
+
+  // POINT — only index extended
+  if(idxExt && !midExt && !rngExt && !pnkExt) return 'point';
+
+  // PEACE ✌ — index + middle extended
+  if(idxExt && midExt && !rngExt && !pnkExt) return 'peace';
+
+  // SPIDEY 🤟 — index + pinky extended, middle + ring curled
+  if(idxExt && !midExt && !rngExt && pnkExt) return 'spidey';
+
+  // OK — thumb tip close to index tip, others extended
+  const thumbIndexDist = dist(thumb, index);
+  const palmSize = dist(wrist, middleMcp);
+  if(thumbIndexDist < palmSize * 0.35 && midExt && rngExt && pnkExt) return 'ok';
+
+  return 'none';
+}
+
+const GESTURE_CONFIG = {
+
+  fist:          { label:'✦ MANDALA SUMMONED ✦',   guideId:'g-fist'  },
+  point:         { label:'✦ SLING RING ACTIVE ✦',  guideId:'g-point' },
+  peace:         { label:'✦ MIRROR DIMENSION ✦',   guideId:'g-peace' },
+  ok_dual:       { label:'✦ TIME STONE UNLOCKED ✦',guideId:'g-ok'    },
+  ok:            { label:'✦ TIME STONE UNLOCKED ✦',guideId:'g-ok'    },
+  spidey:        { label:'✦ ASTRAL PROJECTION ✦',  guideId:'g-spidey'},
+  drawing_circle:{ label:'DRAW A CIRCLE TO OPEN PORTAL…', guideId:'g-open'},
+  none:          { label:'AWAITING GESTURE…',       guideId:null      }
+};
+
+function updateGestureUI(g){
+  const cfg = GESTURE_CONFIG[g] || GESTURE_CONFIG.none;
+  gestureLabel.textContent = cfg.label;
+  document.querySelectorAll('.g-item').forEach(el => el.classList.remove('active'));
+  if(cfg.guideId) document.getElementById(cfg.guideId)?.classList.add('active');
+}
+
+
+let fingerTrail = [];           
+let portalActive = false;       
+let portalCenter = {x:0,y:0};
+let portalRadius = 0;
+let portalFadeFrames = 0;
+const TRAIL_MAX = 90;           // frames of history
+const TRAIL_MIN_PTS = 40;       // need at least this many points
+
+function pushTrailPoint(lm){
+  if(!lm) return;
+  const tip = lmToCanvas(lm[LM.INDEX_TIP]);
+  fingerTrail.push({x:tip.x, y:tip.y, frame:frameCount});
+  if(fingerTrail.length > TRAIL_MAX) fingerTrail.shift();
+}
+
+function detectCircle(){
+  if(fingerTrail.length < TRAIL_MIN_PTS) return false;
+  // Centroid
+  let cx=0,cy=0;
+  fingerTrail.forEach(p=>{cx+=p.x;cy+=p.y;});
+  cx/=fingerTrail.length; cy/=fingerTrail.length;
+  // Mean radius & variance
+  const radii = fingerTrail.map(p=>Math.hypot(p.x-cx,p.y-cy));
+  const meanR = radii.reduce((a,b)=>a+b,0)/radii.length;
+  const variance = radii.reduce((a,b)=>a+(b-meanR)**2,0)/radii.length;
+  const cv = Math.sqrt(variance)/meanR; // coefficient of variation — low = circle
+  // Check angular coverage: points should span ~360°
+  const angles = fingerTrail.map(p=>Math.atan2(p.y-cy,p.x-cx));
+  const sorted = [...angles].sort((a,b)=>a-b);
+  let maxGap=0;
+  for(let i=1;i<sorted.length;i++) maxGap=Math.max(maxGap,sorted[i]-sorted[i-1]);
+  // Wrap-around gap
+  maxGap=Math.max(maxGap, sorted[0]+Math.PI*2-sorted[sorted.length-1]);
+  const coverageOk = maxGap < 1.8; // gap < ~100° means good coverage
+  const circleOk = cv < 0.28 && meanR > 30;
+  if(circleOk && coverageOk){
+    portalCenter={x:cx,y:cy};
+    portalRadius=meanR;
+    return true;
+  }
+  return false;
+}
+
+// ── DUAL OK DETECTION ────────────────────────────────────
+function bothHandsOK(lmList){
+  if(lmList.length < 2) return false;
+  return lmList.every(lm=>classifyGesture(lm)==='ok');
+}
+
+function getDualOKMidpoint(lmList){
+  const c0 = getHandCenter(lmList[0]);
+  const c1 = getHandCenter(lmList[1]);
+  return {x:(c0.x+c1.x)/2, y:(c0.y+c1.y)/2,
+          dist: Math.hypot(c1.x-c0.x,c1.y-c0.y)};
+}
+
+// ── RESIZE ───────────────────────────────────────────────
+function resize(){
+  const stage = document.getElementById('stage');
+  W = canvas.width = stage.clientWidth;
+  H = canvas.height = stage.clientHeight;
+}
+
+// ── FX RENDERERS ────────────────────────────────────────
+
+function drawSkeleton(lm){
+  if(!lm || lm.length < 21) return;
+  const CONNECTIONS = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [0,9],[9,10],[10,11],[11,12],
+    [0,13],[13,14],[14,15],[15,16],
+    [0,17],[17,18],[18,19],[19,20],
+    [5,9],[9,13],[13,17]
+  ];
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(240,165,0,0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#f0a500';
+  ctx.shadowBlur = 6;
+  CONNECTIONS.forEach(([a,b])=>{
+    const pa = lmToCanvas(lm[a]), pb = lmToCanvas(lm[b]);
+    ctx.beginPath();
+    ctx.moveTo(pa.x, pa.y);
+    ctx.lineTo(pb.x, pb.y);
+    ctx.stroke();
+  });
+  lm.forEach((p,i)=>{
+    const cp = lmToCanvas(p);
+    ctx.beginPath();
+    ctx.arc(cp.x, cp.y, i===0 ? 5 : 3, 0, Math.PI*2);
+    ctx.fillStyle = i===0 ? '#ff6600' : '#f0a500';
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function lmToCanvas(p){
+  // landmarks are 0-1, video is mirrored so flip x
+  return { x: (1 - p.x) * W, y: p.y * H };
+}
+
+function getHandCenter(lm){
+  const wrist = lmToCanvas(lm[0]);
+  const mid = lmToCanvas(lm[9]);
+  return { x: (wrist.x + mid.x)/2, y: (wrist.y + mid.y)/2 };
+}
+
+// TRAIL DRAW — glowing fingertip path shown while drawing
+function drawFingerTrail(){
+  if(fingerTrail.length < 2) return;
+  ctx.save();
+  for(let i=1;i<fingerTrail.length;i++){
+    const prog = i/fingerTrail.length;
+    const hue = 180+prog*120;
+    ctx.beginPath();
+    ctx.moveTo(fingerTrail[i-1].x,fingerTrail[i-1].y);
+    ctx.lineTo(fingerTrail[i].x,fingerTrail[i].y);
+    ctx.strokeStyle=`hsla(${hue},100%,72%,${prog*0.85})`;
+    ctx.lineWidth=2.5*prog;
+    ctx.shadowColor=`hsl(${hue},100%,65%)`;ctx.shadowBlur=8;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// PORTAL — takes explicit center + radius from detected circle
+function fxPortal(cx, cy, r){
+  const t = frameCount * 0.018;
+
+  for(let ring=5;ring>=0;ring--){
+    const rr = r + ring*7 + Math.sin(t+ring)*4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, Math.PI*2);
+    ctx.strokeStyle = `hsla(${25+ring*4},100%,60%,${(1-ring/6)*0.5})`;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+
+  for(let i=0;i<72;i++){
+    const angle = (i/72)*Math.PI*2 + t*2.5;
+    const jitter = Math.sin(t*4+i*0.4)*6;
+    const px = cx + (r+jitter)*Math.cos(angle);
+    const py = cy + (r+jitter)*Math.sin(angle);
+    const b = 0.5+0.5*Math.sin(t*6+i*0.3);
+    ctx.beginPath();
+    ctx.arc(px, py, 1.5+b*2.5, 0, Math.PI*2);
+    ctx.fillStyle = `hsla(${15+i*2},100%,${65+b*35}%,${b})`;
+    ctx.fill();
+  }
+
+  ctx.save();ctx.translate(cx, cy);
+  for(let arm=0;arm<8;arm++){
+    ctx.save();ctx.rotate(arm*Math.PI/4 + t);
+    ctx.beginPath();
+    for(let s=0;s<50;s++){
+      const sr=(s/50)*r*0.85;
+      const sa=s*0.16+t;
+      const sx=sr*Math.cos(sa), sy=sr*Math.sin(sa);
+      s===0?ctx.moveTo(sx,sy):ctx.lineTo(sx,sy);
+    }
+    ctx.strokeStyle=`hsla(${30+arm*8},100%,65%,0.5)`;
+    ctx.lineWidth=1.5;ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+
+  if(frameCount%2===0){
+    const a=Math.random()*Math.PI*2;
+    particles.push({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a),
+      vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,
+      life:1,hue:15+Math.random()*35});
+  }
+  particles=particles.filter(p=>{
+    p.x+=p.vx;p.y+=p.vy;p.life-=0.025;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.life*3,0,Math.PI*2);
+    ctx.fillStyle=`hsla(${p.hue},100%,70%,${p.life})`;ctx.fill();
+    return p.life>0;
+  });
+}
+
+// MANDALA — full rainbow, 100% opacity
+function fxMandala(lm){
+  const t = frameCount*0.009;
+  const center = lm ? getHandCenter(lm) : {x:W*0.5, y:H*0.5};
+  const r = Math.min(W,H)*0.34;
+
+  ctx.save();ctx.translate(center.x, center.y);
+
+  // Glowing background disc
+  const bgGrd = ctx.createRadialGradient(0,0,0, 0,0,r*1.05);
+  bgGrd.addColorStop(0,'rgba(0,0,0,0.55)');
+  bgGrd.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath();ctx.arc(0,0,r*1.05,0,Math.PI*2);
+  ctx.fillStyle=bgGrd;ctx.fill();
+
+  // Rainbow spoke rings — each petal fully filled + stroked
+  const layers = [
+    {n:8,  r:r*.22, sz:18, sp:1.1,  startHue:0},
+    {n:12, r:r*.42, sz:14, sp:-0.7, startHue:60},
+    {n:18, r:r*.62, sz:10, sp:0.5,  startHue:140},
+    {n:26, r:r*.80, sz:7,  sp:-0.3, startHue:200},
+    {n:36, r:r*.97, sz:4,  sp:0.2,  startHue:280},
+  ];
+
+  layers.forEach(({n,r:lr,sz,sp,startHue})=>{
+    for(let i=0;i<n;i++){
+      const hue = (startHue + (i/n)*360 + t*40) % 360;
+      const angle=(i/n)*Math.PI*2 + t*sp;
+      const x=lr*Math.cos(angle), y=lr*Math.sin(angle);
+      ctx.save();ctx.translate(x,y);ctx.rotate(angle + t*2.2);
+
+      ctx.shadowColor=`hsl(${hue},100%,65%)`;
+      ctx.shadowBlur=14;
+
+      // Filled diamond
+      ctx.beginPath();
+      ctx.moveTo(0,-sz);ctx.lineTo(sz*.6,0);ctx.lineTo(0,sz);ctx.lineTo(-sz*.6,0);
+      ctx.closePath();
+      ctx.fillStyle=`hsl(${hue},100%,58%)`;
+      ctx.fill();
+      // Bright stroke outline
+      ctx.strokeStyle=`hsl(${(hue+40)%360},100%,85%)`;
+      ctx.lineWidth=1.2;ctx.stroke();
+
+      // Inner cross lines
+      ctx.shadowBlur=6;
+      ctx.beginPath();ctx.moveTo(-sz*.42,0);ctx.lineTo(sz*.42,0);
+      ctx.moveTo(0,-sz*.65);ctx.lineTo(0,sz*.65);
+      ctx.strokeStyle=`hsla(${(hue+180)%360},100%,90%,1)`;
+      ctx.lineWidth=1;ctx.stroke();
+
+      ctx.restore();
+    }
+  });
+
+  // Rainbow connecting spokes
+  for(let i=0;i<24;i++){
+    const a=(i/24)*Math.PI*2 + t*0.35;
+    const hue=(i/24)*360;
+    ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(r*Math.cos(a),r*Math.sin(a));
+    ctx.strokeStyle=`hsla(${hue},100%,65%,0.22)`;ctx.lineWidth=1.2;ctx.stroke();
+  }
+
+  // Outer ring of dots
+  for(let i=0;i<48;i++){
+    const a=(i/48)*Math.PI*2 - t*1.5;
+    const hue=(i/48)*360;
+    const pulse=1+0.3*Math.sin(t*6+i*0.4);
+    const px=(r*1.02)*Math.cos(a), py=(r*1.02)*Math.sin(a);
+    ctx.beginPath();ctx.arc(px,py,3*pulse,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${hue},100%,72%)`;
+    ctx.shadowColor=`hsl(${hue},100%,72%)`;ctx.shadowBlur=8;
+    ctx.fill();
+  }
+
+  // Center jewel — multi-color rotating fill
+  const cHue=(t*60*10)%360;
+  ctx.beginPath();ctx.arc(0,0,20,0,Math.PI*2);
+  const cGrd=ctx.createRadialGradient(0,0,0,0,0,20);
+  cGrd.addColorStop(0,`hsl(${cHue},100%,90%)`);
+  cGrd.addColorStop(0.5,`hsl(${(cHue+120)%360},100%,60%)`);
+  cGrd.addColorStop(1,`hsl(${(cHue+240)%360},100%,45%)`);
+  ctx.fillStyle=cGrd;ctx.shadowColor='#fff';ctx.shadowBlur=30;ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=2;ctx.stroke();
+
+  ctx.restore();
+}
+
+// SLING RING — full-spectrum rainbow sparks
+function fxSlingRing(lm){
+  const t = frameCount*0.02;
+  let center = {x:W*0.5, y:H*0.62};
+  if(lm){
+    const tip = lmToCanvas(lm[LM.INDEX_TIP]);
+    center = tip;
+  }
+
+  // Full-rainbow orbital ring — 100% opacity dots
+  const ringR = 72 + 10*Math.sin(t);
+  for(let i=0;i<100;i++){
+    const hue = (i/100)*360 + t*80;
+    const a=(i/100)*Math.PI*2 + t*3.5;
+    const jitter=Math.sin(t*9+i*0.38)*6;
+    const px=center.x+(ringR+jitter)*Math.cos(a);
+    const py=center.y+(ringR+jitter)*0.4*Math.sin(a);
+    const b=0.6+0.4*(Math.sin(t*5+i*.2)*.5+.5);
+    ctx.beginPath();ctx.arc(px,py,2+b*3,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${hue},100%,${65+b*30}%)`;
+    ctx.shadowColor=`hsl(${hue},100%,70%)`;ctx.shadowBlur=8;
+    ctx.fill();
+  }
+
+  // Second counter-rotating ring
+  for(let i=0;i<60;i++){
+    const hue = (i/60)*360 + 180 - t*60;
+    const a=(i/60)*Math.PI*2 - t*2;
+    const rr = ringR*0.6 + 5*Math.sin(t*4+i*0.5);
+    const px=center.x+rr*Math.cos(a);
+    const py=center.y+rr*0.4*Math.sin(a);
+    ctx.beginPath();ctx.arc(px,py,2,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${hue},100%,80%)`;
+    ctx.shadowColor=`hsl(${hue},100%,80%)`;ctx.shadowBlur=6;
+    ctx.fill();
+  }
+
+  // Spawn vivid rainbow sparks — full hue spread
+  if(frameCount%2===0){
+    for(let i=0;i<5;i++){
+      const a=Math.PI+(Math.random()-.5)*2;
+      const spd=4+Math.random()*7;
+      const hue=Math.random()*360;
+      sparks.push({x:center.x+(Math.random()-.5)*60,y:center.y+(Math.random()-.5)*18,
+        vx:Math.cos(a)*spd,vy:Math.sin(a)*spd-2.5,life:1,trail:[],
+        hue,size:1.5+Math.random()*2.5});
+    }
+  }
+
+  sparks=sparks.filter(s=>{
+    s.trail.push({x:s.x,y:s.y});if(s.trail.length>18)s.trail.shift();
+    s.x+=s.vx;s.y+=s.vy;s.vy+=0.18;s.vx*=0.985;s.life-=0.018;
+    // Vivid trail — full color, fading only in alpha
+    s.trail.forEach((pt,j)=>{
+      const trHue=(s.hue+j*4)%360;
+      const a=(j/s.trail.length)*s.life;
+      ctx.beginPath();ctx.arc(pt.x,pt.y,s.size*(j/s.trail.length)*1.2,0,Math.PI*2);
+      ctx.fillStyle=`hsla(${trHue},100%,70%,${a})`;
+      ctx.shadowColor=`hsl(${trHue},100%,65%)`;ctx.shadowBlur=6;
+      ctx.fill();
+    });
+    // Bright white-hot head
+    ctx.beginPath();ctx.arc(s.x,s.y,s.size*2,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${s.hue},100%,96%)`;
+    ctx.shadowColor=`hsl(${s.hue},100%,70%)`;ctx.shadowBlur=16;
+    ctx.fill();
+    return s.life>0 && s.y<H+40;
+  });
+
+  // Center glow at fingertip
+  const glowGrd=ctx.createRadialGradient(center.x,center.y,0,center.x,center.y,ringR*0.5);
+  const hc=(t*80*10)%360;
+  glowGrd.addColorStop(0,`hsla(${hc},100%,80%,0.35)`);
+  glowGrd.addColorStop(0.5,`hsla(${(hc+120)%360},100%,60%,0.1)`);
+  glowGrd.addColorStop(1,'transparent');
+  ctx.beginPath();ctx.arc(center.x,center.y,ringR*0.5,0,Math.PI*2);
+  ctx.fillStyle=glowGrd;ctx.fill();
+}
+
+// MIRROR DIMENSION
+function fxMirror(){
+  const t=frameCount*0.01;
+  ctx.save();ctx.translate(W/2,H/2);
+  const segs=8;
+  for(let i=0;i<segs;i++){
+    ctx.save();ctx.rotate((i/segs)*Math.PI*2+t*0.25);
+    ctx.beginPath();ctx.moveTo(0,0);
+    const a2=(Math.PI*2)/segs;
+    const rr=Math.max(W,H);
+    ctx.lineTo(rr*Math.cos(0),rr*Math.sin(0));
+    ctx.lineTo(rr*Math.cos(a2),rr*Math.sin(a2));
+    ctx.closePath();ctx.clip();
+    const flip=i%2===0?1:-1;
+    const sc=0.48+0.12*Math.sin(t+i);
+    ctx.scale(flip*sc,sc);ctx.rotate(i%2===0?0:Math.PI/segs);
+    ctx.translate(-W/2,-H/2);
+    ctx.drawImage(video,0,0,W,H);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // Fracture lines
+  for(let i=0;i<14;i++){
+    const a=(i/14)*Math.PI*2+t*0.15;
+    ctx.beginPath();ctx.moveTo(W/2,H/2);
+    ctx.lineTo(W/2+Math.cos(a)*W,H/2+Math.sin(a)*H);
+    const grd=ctx.createLinearGradient(W/2,H/2,W/2+Math.cos(a)*W*.5,H/2+Math.sin(a)*H*.5);
+    grd.addColorStop(0,`hsla(${i*15+t*15},85%,70%,0.7)`);
+    grd.addColorStop(1,'transparent');
+    ctx.strokeStyle=grd;ctx.lineWidth=1;ctx.stroke();
+  }
+}
+
+// TIME STONE — midpoint between both OK hands, size scales with hand distance
+function fxTimeStone(cx, cy, handDist){
+  const t=frameCount*0.012;
+  const r = Math.min(Math.max(handDist*0.45, 60), Math.min(W,H)*0.28);
+
+  // Sepia grade
+  const id=ctx.getImageData(0,0,W,H);const d=id.data;
+  const s=0.35+0.15*Math.sin(t*2);
+  for(let i=0;i<d.length;i+=4){
+    const gr=.3*d[i]+.59*d[i+1]+.11*d[i+2];
+    d[i]  =d[i]*(1-s)+(gr*1.2)*s;
+    d[i+1]=d[i+1]*(1-s)+(gr*.9)*s;
+    d[i+2]=d[i+2]*(1-s)+(gr*.65)*s;
+  }
+  ctx.putImageData(id,0,0);
+
+  ctx.save();ctx.translate(cx, cy);
+
+  // Energy beam connecting both hands (horizontal line)
+  const beamW = handDist*0.5;
+  const beamGrd = ctx.createLinearGradient(-beamW,0,beamW,0);
+  beamGrd.addColorStop(0,'transparent');
+  beamGrd.addColorStop(0.5,'rgba(0,255,136,0.45)');
+  beamGrd.addColorStop(1,'transparent');
+  ctx.beginPath();ctx.rect(-beamW,-3,beamW*2,6);
+  ctx.fillStyle=beamGrd;ctx.fill();
+
+  for(let ring=0;ring<5;ring++){
+    const rr=r*(0.3+ring*0.18);
+    ctx.beginPath();
+    for(let a=0;a<Math.PI*2;a+=0.04){
+      const pulse=1+0.05*Math.sin(t*7+ring*2+a*4);
+      const x=rr*pulse*Math.cos(a+t*(ring%2===0?1:-1));
+      const y=rr*pulse*Math.sin(a+t*(ring%2===0?1:-1));
+      a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle=`hsla(${140+ring*10},85%,${55+ring*8}%,${0.5+ring*.08})`;
+    ctx.lineWidth=1.5;ctx.shadowColor='#00ff88';ctx.shadowBlur=12;ctx.stroke();
+  }
+
+  // Eye of Agamotto — scales with hand separation
+  const ew=r*.40,eh=r*.26;
+  ctx.beginPath();ctx.ellipse(0,0,ew,eh,0,0,Math.PI*2);
+  ctx.strokeStyle='rgba(0,255,136,0.9)';ctx.lineWidth=2;
+  ctx.shadowColor='#00ff88';ctx.shadowBlur=30;ctx.stroke();
+
+  const pr=Math.max(10, r*0.12)+3*Math.sin(t*4);
+  ctx.beginPath();ctx.arc(0,0,pr,0,Math.PI*2);
+  ctx.fillStyle=`rgba(0,255,136,${0.55+0.25*Math.sin(t*5)})`;ctx.fill();
+
+  ctx.restore();
+
+  // Clock corners
+  [[28,28,t*3],[W-28,28,-t*3],[28,H-28,-t*2],[W-28,H-28,t*2]].forEach(([x,y,a])=>{
+    ctx.save();ctx.translate(x,y);
+    ctx.beginPath();ctx.arc(0,0,18,0,Math.PI*2);
+    ctx.strokeStyle='rgba(0,255,136,0.35)';ctx.lineWidth=1;ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(13*Math.cos(a),13*Math.sin(a));
+    ctx.strokeStyle='rgba(0,255,136,0.6)';ctx.lineWidth=1.5;ctx.stroke();
+    ctx.restore();
+  });
+}
+
+// ASTRAL
+function fxAstral(){
+  const t=frameCount*0.014;
+
+  [{dx:-7,dy:-5,alpha:.13,hr:200},{dx:7,dy:5,alpha:.13,hr:220},{dx:0,dy:-10,alpha:.08,hr:180}]
+  .forEach(({dx,dy,alpha,hr})=>{
+    ctx.save();ctx.globalAlpha=alpha*(0.65+0.35*Math.sin(t*3));
+    ctx.filter=`hue-rotate(${hr}deg) saturate(3) brightness(1.6)`;
+    ctx.drawImage(video,dx*Math.sin(t),dy*Math.cos(t*.7),W,H);
+    ctx.restore();
+  });
+
+  const grd=ctx.createRadialGradient(W/2,H/2,H*.18,W/2,H/2,H*.85);
+  grd.addColorStop(0,'transparent');
+  grd.addColorStop(.6,'rgba(60,80,220,0.07)');
+  grd.addColorStop(1,`rgba(80,40,220,${0.28+0.1*Math.sin(t*2)})`);
+  ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
+
+  for(let i=0;i<10;i++){
+    const px=W*.5+W*.38*Math.sin(t*.65+i*1.05);
+    const py=H*.5+H*.38*Math.cos(t*.5+i*.9);
+    const pr=2.5+2*Math.sin(t*3+i);
+    const a=0.25+0.3*Math.sin(t*2+i*.6);
+    ctx.beginPath();ctx.arc(px,py,pr*5,0,Math.PI*2);
+    ctx.fillStyle=`hsla(${210+i*10},100%,65%,${a*.18})`;ctx.fill();
+    ctx.beginPath();ctx.arc(px,py,pr,0,Math.PI*2);
+    ctx.fillStyle=`hsla(${210+i*10},100%,88%,${a})`;ctx.fill();
+  }
+
+  const sy=((frameCount*0.4)%H);
+  const lg=ctx.createLinearGradient(0,sy-5,0,sy+5);
+  lg.addColorStop(0,'transparent');lg.addColorStop(.5,'rgba(100,150,255,0.18)');lg.addColorStop(1,'transparent');
+  ctx.fillStyle=lg;ctx.fillRect(0,sy-5,W,10);
+}
+
+// ── MAIN RENDER ─────────────────────────────────────────
+let lastLandmarks = null;
+let allLandmarks = [];
+
+function renderFrame(lmList){
+  frameCount++;
+  ctx.clearRect(0,0,W,H);
+
+  ctx.save();
+  ctx.translate(W,0);ctx.scale(-1,1);
+  ctx.drawImage(video,0,0,W,H);
+  ctx.restore();
+
+  allLandmarks = lmList || [];
+  const lm0 = allLandmarks[0] || null;
+  const lm1 = allLandmarks[1] || null;
+
+  // Draw skeleton for all detected hands
+  allLandmarks.forEach(lm => drawSkeleton(lm));
+
+  const g = currentGesture;
+
+  // Always show trail while pointing (even when portal not yet active)
+  if(g === 'point' || g === 'drawing_circle' || g === 'portal_active'){
+    if(lm0) pushTrailPoint(lm0);
+    drawFingerTrail();
+  }
+
+  switch(g){
+    case 'drawing_circle':
+      // Trail drawn above — nothing else
+      break;
+    case 'portal_active':
+      // Portal fades out if hand leaves
+      portalFadeFrames++;
+      if(portalFadeFrames > 180){ // 3 seconds then reset
+        currentGesture='none';portalActive=false;fingerTrail=[];
+        particles=[];updateGestureUI('none');
+      }
+      fxPortal(portalCenter.x, portalCenter.y, portalRadius);
+      break;
+    case 'fist':   fxMandala(lm0); break;
+    case 'point':  fxSlingRing(lm0); break;
+    case 'peace':  fxMirror(); break;
+    case 'ok_dual':
+      if(lm0 && lm1){
+        const mp = getDualOKMidpoint([lm0,lm1]);
+        fxTimeStone(mp.x, mp.y, mp.dist);
+      }
+      break;
+    case 'ok':
+      if(lm0){
+        const c = getHandCenter(lm0);
+        fxTimeStone(c.x, c.y, 120);
+      }
+      break;
+    case 'spidey': fxAstral(); break;
+  }
+}
+
+// ── MEDIAPIPE SETUP ─────────────────────────────────────
+let handsModel;
+
+async function startApp(){
+  document.getElementById('start-screen').style.display='none';
+  document.getElementById('loading').style.display='flex';
+
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:1280},height:{ideal:720},facingMode:'user'}
+    });
+    video.srcObject=stream;
+    await new Promise(r=>video.onloadedmetadata=r);
+    resize();
+    window.addEventListener('resize',resize);
+
+    handsModel = new Hands({locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+    handsModel.setOptions({
+      maxNumHands:2,
+      modelComplexity:1,
+      minDetectionConfidence:0.7,
+      minTrackingConfidence:0.6
+    });
+
+    handsModel.onResults(results=>{
+      const lmList = results.multiHandLandmarks || [];
+      const lm0 = lmList[0] || null;
+
+      // ── DUAL OK CHECK (highest priority) ──
+      if(bothHandsOK(lmList)){
+        if(currentGesture !== 'ok_dual'){
+          currentGesture='ok_dual';
+          particles=[];sparks=[];fingerTrail=[];portalActive=false;
+          updateGestureUI('ok_dual');
+        }
+        renderFrame(lmList);
+        return;
+      }
+
+      // ── PORTAL ACTIVE — keep showing it ──
+      if(currentGesture === 'portal_active'){
+        renderFrame(lmList);
+        return;
+      }
+
+      // ── GESTURE CLASSIFICATION ──
+      const raw = lm0 ? classifyGesture(lm0) : 'none';
+
+      // ── OPEN HAND → enter circle-drawing mode ──
+      if(raw === 'open'){
+        // Switch to drawing mode — collect trail
+        if(currentGesture !== 'drawing_circle'){
+          currentGesture='drawing_circle';
+          fingerTrail=[];portalActive=false;portalFadeFrames=0;
+          particles=[];sparks=[];
+          updateGestureUI('drawing_circle');
+        }
+        if(lm0) pushTrailPoint(lm0);
+        // Check if trail forms a circle
+        if(detectCircle()){
+          currentGesture='portal_active';
+          portalActive=true;portalFadeFrames=0;
+          fingerTrail=[];
+          updateGestureUI('portal_active');
+        }
+        renderFrame(lmList);
+        return;
+      }
+
+      // If hand opens mid-draw, reset trail
+      if(currentGesture === 'drawing_circle' && raw !== 'open'){
+        fingerTrail=[];
+      }
+
+      // ── STANDARD GESTURE HOLD LOGIC ──
+      if(raw===prevGesture){
+        gestureHoldFrames++;
+      }else{
+        gestureHoldFrames=0;
+        prevGesture=raw;
+      }
+
+      if(gestureHoldFrames>=GESTURE_HOLD_THRESHOLD){
+        if(raw!==currentGesture){
+          currentGesture=raw;
+          particles=[];sparks=[];
+          updateGestureUI(raw);
+        }
+      }
+
+      renderFrame(lmList);
+    });
+
+    const camera = new Camera(video,{
+      onFrame: async()=>{ await handsModel.send({image:video}); },
+      width:1280,height:720
+    });
+
+    await camera.start();
+    document.getElementById('loading').style.display='none';
+    updateGestureUI('none');
+
+  }catch(e){
+    document.getElementById('loading').innerHTML=
+      '<span style="color:#e05;letter-spacing:.15em">CAMERA ACCESS DENIED</span><p style="font-size:11px;color:#666;margin-top:8px">Allow camera permissions and reload the page</p>';
+    console.error(e);
+  }
+}
+</script>
+</body>
+</html>
