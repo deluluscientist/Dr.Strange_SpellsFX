@@ -12,7 +12,7 @@ A browser-based Augmented Reality (AR) experience that turns your hand gestures 
 
 ---
 
-## 🖐️ The Spellbook
+##  The Spellbook
 
 | Gesture | Spell Effect | Description |
 | :--- | :--- | :--- |
