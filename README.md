@@ -21,7 +21,7 @@ A browser-based Augmented Reality (AR) experience that turns your hand gestures 
 | **Peace (✌)** | **Mirror Dimension** | Fractures the camera feed into a kaleidoscope. |
 | **Dual OK (👌+👌)** | **Time Stone** | Eye of Agamotto activation with sepia time-warps. |
 | **Spidey (🤟)** | **Astral Projection** | Creates a ghostly, glowing "spirit" offset of yourself. |
-| **Open Palm** | **Portal** | Trace a circle in the air to "carve" a portal into space. |
+
 
 ---
 
